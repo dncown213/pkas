@@ -1400,18 +1400,12 @@ const firebaseConfig = {
   measurementId: "G-BT5H2DDQTD"
 };
 
-// 파이어베이스 앱 초기화 (에러 방지용 우회 코드)
-let db = null;
-try {
-    if (typeof firebase !== 'undefined') {
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        db = firebase.firestore();
-    }
-} catch(e) {
-    console.error("파이어베이스 초기화 에러:", e);
+// 파이어베이스 앱 초기화
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
 }
+const db = firebase.firestore();
+
 // 내 계정의 고유 ID 부여 함수 (DB 식별용)
 function checkAndCreateUID() {
     if (!state.player.uid) {
@@ -1922,25 +1916,25 @@ function getSpriteUrl(id, isShiny = false) {
     }
 
     function initGame() {
-checkAndCreateUID(); // <--- 이거 한 줄만 맨 위에 추가!
+        checkAndCreateUID(); 
         checkAndInitIVs(false);
+
+        // 🌟 에러 원인 해결: 허공에 떠돌던 아레나 보정 로직을 안전한 initGame 내부로 이동!
+        if (!state.arena) {
+            state.arena = {
+                rating: 1000,
+                lastDay: -1,
+                plays: 0,
+                atkTeam: [null, null, null],
+                defTeam: [null, null, null]
+            };
+        }
+
         updateUI(); 
-        // 처음에 자동으로 훈련을 실행시키던 에러 원인 제거 완료!
         if(state.gameLoop) clearInterval(state.gameLoop); 
         state.gameLoop = setInterval(tick, 1000);
-
     }
 
-// state 초기화 혹은 로드 후 누락된 arena 데이터 보정 로직 (initGame 등에 넣어도 무방)
-if (!state.arena) {
-    state.arena = {
-        rating: 1000,
-        lastDay: -1,
-        plays: 0,
-        atkTeam: [null, null, null],
-        defTeam: [null, null, null]
-    };
-}
 
 // 특정 포켓몬의 CP를 계산해주는 전용 함수 (현재 능력치 기준)
 function getPokeCP(poke) {
