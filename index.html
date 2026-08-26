@@ -1400,12 +1400,18 @@ const firebaseConfig = {
   measurementId: "G-BT5H2DDQTD"
 };
 
-// 파이어베이스 앱 초기화
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
+// 파이어베이스 앱 초기화 (에러 방지용 우회 코드)
+let db = null;
+try {
+    if (typeof firebase !== 'undefined') {
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.firestore();
+    }
+} catch(e) {
+    console.error("파이어베이스 초기화 에러:", e);
 }
-const db = firebase.firestore();
-
 // 내 계정의 고유 ID 부여 함수 (DB 식별용)
 function checkAndCreateUID() {
     if (!state.player.uid) {
