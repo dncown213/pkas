@@ -1916,24 +1916,21 @@ function getSpriteUrl(id, isShiny = false) {
     }
 
     function initGame() {
-        checkAndCreateUID(); 
-        checkAndInitIVs(false);
+    if(typeof checkAndCreateUID === 'function') checkAndCreateUID();
+    checkAndInitIVs(false);
 
-        // 🌟 에러 원인 해결: 허공에 떠돌던 아레나 보정 로직을 안전한 initGame 내부로 이동!
-        if (!state.arena) {
-            state.arena = {
-                rating: 1000,
-                lastDay: -1,
-                plays: 0,
-                atkTeam: [null, null, null],
-                defTeam: [null, null, null]
-            };
-        }
-
-        updateUI(); 
-        if(state.gameLoop) clearInterval(state.gameLoop); 
-        state.gameLoop = setInterval(tick, 1000);
+    // 세이브 파일 불러올 때 누락된 데이터가 있으면 안전하게 채워넣는 방어 로직
+    if (!state.arena) {
+        state.arena = { rating: 1000, lastDay: -1, plays: 0, atkTeam: [null, null, null], defTeam: [null, null, null] };
     }
+    if (!state.dungeonState) {
+        state.dungeonState = { lastDay: -1, attempts: 3, clearStages: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 } };
+    }
+
+    updateUI(); 
+    if(state.gameLoop) clearInterval(state.gameLoop); 
+    state.gameLoop = setInterval(tick, 1000);
+}
 
 
 // 특정 포켓몬의 CP를 계산해주는 전용 함수 (현재 능력치 기준)
@@ -2694,14 +2691,22 @@ const state = {
         baseId: 1, currentId: 1, stage: 1, name: "", originalName: "", spriteUrl: "", natureIndex: 20, types: [],
         level: 1, exp: 0, maxExp: 100, baseHp: 0, baseAtk: 0, baseDef: 0, baseSpe: 0,
         maxHp: 20, atk: 10, def: 10, spe: 10, spRate: 25, friendship: 0,
-        heldItem: "생명의구슬", isShiny: false // 🌟 이로치 여부 플래그 추가
+        heldItem: "생명의구슬", isShiny: false 
     },
     currentAction: 'train_atk', gameLoop: null, gymLevel: 1, towerFloor: 1, lastSavedTime: 0, playDays: 0,
-    // 🌟 요일 던전 진행도 관리 (타입별로 각각 5단계까지 저장)
+    // 요일 던전 진행도 데이터
     dungeonState: {
         lastDay: -1,
         attempts: 3,
         clearStages: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 } 
+    },
+    // 비동기 아레나 시스템 데이터
+    arena: {
+        rating: 1000,
+        lastDay: -1,
+        plays: 0,
+        atkTeam: [null, null, null],
+        defTeam: [null, null, null]
     }
 };
 
