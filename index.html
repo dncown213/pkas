@@ -2005,13 +2005,22 @@ function openTeamSelect(teamType, slotIdx) {
     
     // 현재 육성중인 포켓몬 + PC 포켓몬
     let allPokes = [state.pokemon, ...(state.pc || [])];
+    let currentTeam = teamType === 'atk' ? state.arena.atkTeam : state.arena.defTeam;
     
     allPokes.forEach((p, idx) => {
         let cp = getPokeCP(p);
         let isOver = cp > cpLimit;
-        // is-active: -1은 메인 포켓몬, 나머지는 PC 인덱스
+        let actualIdx = idx === 0 ? -1 : idx - 1;
+        
+        // 🌟 중복 검사: 다른 슬롯에 이미 이 포켓몬이 들어가 있는지 확인
+        let isDuplicate = currentTeam.some((tp, i) => i !== slotIdx && tp && (tp.rosterIdx === actualIdx || (tp.name === p.name && tp.level === p.level && tp.maxHp === p.maxHp)));
+
+        let btnDisabled = isOver || isDuplicate;
+        let btnText = isDuplicate ? '등록됨' : (isOver ? 'CP 초과' : '선택');
+        let btnColor = btnDisabled ? '#555' : '#3498db';
+        
         listDiv.innerHTML += `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:#333; padding:10px; border-radius:8px; opacity:${isOver ? 0.5 : 1};">
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#333; padding:10px; border-radius:8px; opacity:${btnDisabled ? 0.5 : 1};">
                 <div style="display:flex; align-items:center; gap:10px;">
                     <img src="${p.spriteUrl}" style="width:40px; image-rendering:pixelated;">
                     <div>
@@ -2019,14 +2028,14 @@ function openTeamSelect(teamType, slotIdx) {
                         <div style="font-size:12px; color:#ffcc00;">CP: ${cp}</div>
                     </div>
                 </div>
-                <button class="btn-retro" style="background:${isOver ? '#555' : '#3498db'}; font-size:12px; padding:8px;" 
-                    ${isOver ? 'disabled' : ''} onclick="setArenaMember(${idx === 0 ? -1 : idx-1})">선택</button>
+                <button class="btn-retro" style="background:${btnColor}; font-size:12px; padding:8px;" 
+                    ${btnDisabled ? 'disabled' : ''} onclick="setArenaMember(${actualIdx})">${btnText}</button>
             </div>
         `;
     });
     
     // 해제 버튼
-    listDiv.innerHTML += `<button class="btn-retro" style="background:#e74c3c; width:100%;" onclick="setArenaMember(null)">선택 해제</button>`;
+    listDiv.innerHTML += `<button class="btn-retro" style="background:#e74c3c; width:100%; margin-top:10px;" onclick="setArenaMember(null)">현재 슬롯 비우기</button>`;
     document.getElementById('arena-select-modal').style.display = 'flex';
 }
 
@@ -2065,6 +2074,7 @@ function setArenaMember(targetIdx) {
     let selectedPoke = null;
     if(targetIdx !== null) {
         selectedPoke = targetIdx === -1 ? JSON.parse(JSON.stringify(state.pokemon)) : JSON.parse(JSON.stringify(state.pc[targetIdx]));
+        selectedPoke.rosterIdx = targetIdx; // 🌟 고유 식별자 부여 (중복 방지용)
     }
     
     if(selectingTeam === 'atk') {
@@ -2074,6 +2084,11 @@ function setArenaMember(targetIdx) {
         // 수비팀을 세팅할 때마다 DB에 자동 저장 (실제 유저들에게 노출됨)
         uploadArenaDataToDB(); 
     }
+    
+    saveGame();
+    renderArenaTeams();
+    document.getElementById('arena-select-modal').style.display = 'none';
+}
     
     saveGame();
     renderArenaTeams();
@@ -2115,65 +2130,45 @@ async function findArenaMatch() {
     }
 }
 
-// === 상대 목록 렌더링 로직 ===
+// === 상대 목록 렌더링 로직 (AI 제거) ===
 function showOpponentList(opponents) {
-    let cpLimit = currentLeague === 'super' ? 1500 : (currentLeague === 'hyper' ? 2500 : 999999);
-    let baseLv = currentLeague === 'super' ? 25 : (currentLeague === 'hyper' ? 45 : 75);
-
-    // 상대가 부족하면 AI 더미 유저로 채우기 (항상 최소 3명의 선택지 제공)
-    while(opponents.length < 3) {
-        let dummyRating = Math.max(0, state.arena.rating + Math.floor(Math.random() * 60) - 20);
-        let dummyTeam = [];
-        for(let i=0; i<3; i++) {
-            let randId = Math.floor(Math.random() * 151) + 1;
-            let d = {
-                currentId: randId, name: "상대 포켓몬", level: baseLv + Math.floor(Math.random()*5),
-                maxHp: 80 + baseLv*3, atk: 15 + baseLv, def: 15 + baseLv, spe: 15 + baseLv, spRate: 25,
-                natureIndex: 20, types: ["normal"], ivs: {maxHp:'B', atk:'B', def:'B', spe:'B'}, heldItem: "먹다남은음식"
-            };
-            let dCp = getPokeCP(d);
-            if(dCp > cpLimit && cpLimit < 999999) {
-                let ratio = cpLimit / dCp;
-                d.maxHp = Math.floor(d.maxHp * ratio); d.atk = Math.floor(d.atk * ratio);
-                d.def = Math.floor(d.def * ratio); d.spe = Math.floor(d.spe * ratio);
-            }
-            assignRandomSkills(d, false);
-            dummyTeam.push(d);
-        }
-        opponents.push({
-            id: null,
-            playerName: "아카데미 AI " + Math.floor(Math.random()*100),
-            rating: dummyRating,
-            defTeam: dummyTeam
-        });
-    }
-
     let html = "";
     // 선택 시 데이터를 꺼내오기 위해 window 전역 변수에 임시 저장
     window.tempArenaOpponents = opponents; 
 
-    opponents.forEach((op, index) => {
-        let teamHtml = op.defTeam.map(p => {
-            if(!p) return `<div style="width:36px; height:36px; background:#111; border:1px solid #555; border-radius:5px;"></div>`;
-            let sprite = p.spriteUrl || getSpriteUrl(p.currentId, p.isShiny);
-            return `<img src="${sprite}" style="width:36px; height:36px; image-rendering:pixelated; background:#333; border-radius:5px; border:1px solid #555;">`;
-        }).join('');
-
-        html += `
-            <div style="background:#222; border:2px solid #555; border-radius:10px; padding:12px; cursor:pointer; transition:0.2s;" 
-                 onclick="startSelectedArenaMatch(${index})"
-                 onmouseover="this.style.borderColor='#e056fd'; this.style.background='#2a2a4a';"
-                 onmouseout="this.style.borderColor='#555'; this.style.background='#222';">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <div style="font-weight:bold; font-size:15px; color:white;">${op.playerName}</div>
-                    <div style="font-size:12px; color:#ffcc00; font-weight:bold;">레이팅: ${op.rating}</div>
-                </div>
-                <div style="display:flex; gap:10px; justify-content:center;">
-                    ${teamHtml}
-                </div>
+    // 🌟 상대방이 한 명도 없을 때 표시할 UI
+    if (opponents.length === 0) {
+        html = `
+            <div style="padding: 40px 10px; text-align: center; color: #a0a4b8; font-size: 15px;">
+                <div style="font-size: 50px; margin-bottom: 15px;">😢</div>
+                현재 조건에 맞는 상대가 없습니다.<br>나중에 다시 시도해 주세요.
             </div>
         `;
-    });
+    } else {
+        // 실제 유저가 있을 경우 렌더링
+        opponents.forEach((op, index) => {
+            let teamHtml = op.defTeam.map(p => {
+                if(!p) return `<div style="width:36px; height:36px; background:#111; border:1px solid #555; border-radius:5px;"></div>`;
+                let sprite = p.spriteUrl || getSpriteUrl(p.currentId, p.isShiny);
+                return `<img src="${sprite}" style="width:36px; height:36px; image-rendering:pixelated; background:#333; border-radius:5px; border:1px solid #555;">`;
+            }).join('');
+
+            html += `
+                <div style="background:#222; border:2px solid #555; border-radius:10px; padding:12px; cursor:pointer; transition:0.2s;" 
+                     onclick="startSelectedArenaMatch(${index})"
+                     onmouseover="this.style.borderColor='#e056fd'; this.style.background='#2a2a4a';"
+                     onmouseout="this.style.borderColor='#555'; this.style.background='#222';">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <div style="font-weight:bold; font-size:15px; color:white;">${op.playerName}</div>
+                        <div style="font-size:12px; color:#ffcc00; font-weight:bold;">레이팅: ${op.rating}</div>
+                    </div>
+                    <div style="display:flex; gap:10px; justify-content:center;">
+                        ${teamHtml}
+                    </div>
+                </div>
+            `;
+        });
+    }
     
     document.getElementById('arena-opponent-list').innerHTML = html;
     document.getElementById('arena-opponent-modal').style.display = 'flex';
