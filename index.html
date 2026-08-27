@@ -2085,6 +2085,11 @@ function setArenaMember(targetIdx) {
         uploadArenaDataToDB(); 
     }
     
+    // 👇 삭제되어서 게임을 멈추게 했던 핵심 코드와 닫는 괄호 복구! 👇
+    saveGame();
+    renderArenaTeams();
+    document.getElementById('arena-select-modal').style.display = 'none';
+} 
 
 // === 📡 실제 유저를 검색해서 목록으로 보여주는 매칭 함수 ===
 async function findArenaMatch() {
